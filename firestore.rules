@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Layanan boleh dibaca pengunjung, hanya admin dapat mengubah.
+    match /services/{serviceId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Pengunjung dapat mengirim order, tetapi tidak dapat membaca order siapa pun.
+    match /orders/{orderId} {
+      allow create: if request.resource.data.keys().hasAll(['name','serviceName','details','status','createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.details is string
+        && request.resource.data.details.size() <= 3000
+        && request.resource.data.status == 'baru';
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Buat dokumen admins/{UID_AUTH_ADMIN} secara manual di Firestore Console.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
